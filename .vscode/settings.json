@@ -1,0 +1,26 @@
+{
+    "php.validate.executablePath": "/opt/homebrew/opt/php@8.3/bin/php",
+    "phpserver.phpPath": "/opt/homebrew/opt/php@8.3/bin/php",
+    "phpserver.port": 3001,
+    "intelephense.environment.phpVersion": "8.3.33",
+    "intelephense.environment.executablePath": "/opt/homebrew/opt/php@8.3/bin/php",
+    // --- PHP Intelliphense stubs to recognize new syntax (enum, readonly, etc.) ---
+    "intelephense.stubs": [
+        "apache", "bcmath", "bz2", "calendar", "com_dotnet", "Core", "ctype",
+        "curl", "date", "dba", "dom", "enchant", "exif", "FFI", "fileinfo",
+        "filter", "fpm", "ftp", "gd", "gettext", "gmp", "hash", "iconv",
+        "imap", "intl", "json", "ldap", "libxml", "mbstring", "meta",
+        "mysqli", "oci8", "odbc", "openssl", "pcntl", "pcre", "PDO",
+        "pdo_ibm", "pdo_mysql", "pdo_pgsql", "pdo_sqlite", "pgsql", "Phar",
+        "posix", "pspell", "readline", "Reflection", "session", "shmop",
+        "SimpleXML", "sockets", "sodium", "SPL", "sqlite3", "standard",
+        "superglobals", "sysvmsg", "sysvsem", "sysvshm", "tidy", "tokenizer",
+        "xml", "xmlreader", "xmlrpc", "xmlwriter", "xsl", "Zend OPcache",
+        "zip", "zlib"
+    ],
+
+    // --- Formatter (optional, if you use php-cs-fixer) ---
+    "[php]": {
+        "editor.defaultFormatter": "bmewburn.vscode-intelephense-client"
+    }
+}

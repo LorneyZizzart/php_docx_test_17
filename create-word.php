@@ -4,7 +4,7 @@ require_once __DIR__ . '/phpdocx/classes/CreateDocx.php';
 $docx = new CreateDocx();
 
 // --------------------------------------------------
-// 1. Título
+// 1. Title
 // --------------------------------------------------
 
 $docx->addText(
@@ -18,7 +18,7 @@ $docx->addText(
 );
 
 // --------------------------------------------------
-// 2. Información del empleado
+// 2. Employee Information
 // --------------------------------------------------
 
 $docx->addText(
@@ -198,7 +198,7 @@ $docx->addText(
 // 7. Generate DOCX
 // --------------------------------------------------
 
-$output = __DIR__ . '/documents/performance-review-test.docx';
+$output = __DIR__ . '/documents/create-word.docx';
 
 $docx->createDocx($output);
 

@@ -1,185 +1,126 @@
 <?php
-require_once __DIR__ . '/phpdocx/classes/CreateDocx.php';
 
-$docx = new CreateDocx();
+declare(strict_types=1);
 
-/*
- * Título
+/**
+ * Represents a supported operating system for locating the LibreOffice binary.
  */
-$docx->addText(
-    'Performance Review Report',
-    [
-        'bold' => true,
-        'font' => 'Arial',
-        'fontSize' => 20,
-        'color' => '333333',
-        'textAlign' => 'center',
-        'spacingAfter' => 200
-    ]
-);
+final class OperatingSystem {
+    public const MACOS = 'Darwin';
+    public const WINDOWS = 'Windows';
+    public const LINUX = 'Linux';
 
-/*
- * Información
- */
-$docx->addText(
-    'Employee Information',
-    [
-        'bold' => true,
-        'font' => 'Arial',
-        'fontSize' => 14,
-        'color' => '333333',
-        'spacingBefore' => 200,
-        'spacingAfter' => 100
-    ]
-);
+    public static function current(): string {
+        return in_array(PHP_OS_FAMILY, [self::MACOS, self::WINDOWS, self::LINUX], true)
+            ? PHP_OS_FAMILY
+            : self::LINUX;
+    }
 
-$data = [
-    ['Employee', 'John Smith'],
-    ['Position', 'Software Developer'],
-    ['Department', 'Engineering'],
-    ['Review Period', 'January - June 2026'],
-];
-
-$docx->addTable(
-    $data,
-    [
-        'border' => 'single',
-        'borderWidth' => 6,
-        'borderColor' => 'CCCCCC',
-        'font' => 'Arial',
-        'fontSize' => 10,
-        'tableAlign' => 'center',
-        'columnWidths' => [
-            2500,
-            5000
-        ]
-    ]
-);
-
-/*
- * Performance summary
- */
-$docx->addText(
-    'Performance Summary',
-    [
-        'bold' => true,
-        'font' => 'Arial',
-        'fontSize' => 14,
-        'spacingBefore' => 300,
-        'spacingAfter' => 100
-    ]
-);
-
-$docx->addText(
-    'The employee demonstrated strong technical skills and '
-    . 'consistent performance throughout the review period.',
-    [
-        'font' => 'Arial',
-        'fontSize' => 11
-    ]
-);
-
-/*
- * Evaluations
- */
-$docx->addText(
-    'Performance Evaluation',
-    [
-        'bold' => true,
-        'font' => 'Arial',
-        'fontSize' => 14,
-        'spacingBefore' => 300,
-        'spacingAfter' => 100
-    ]
-);
-
-$evaluation = [
-    ['Category', 'Rating', 'Comments'],
-    ['Technical Skills', 'Excellent', 'Strong programming skills.'],
-    ['Code Quality', 'Good', 'Clean and maintainable code.'],
-    ['Teamwork', 'Excellent', 'Works effectively with the team.'],
-    ['Communication', 'Good', 'Communicates clearly.'],
-];
-
-$docx->addTable(
-    $evaluation,
-    [
-        'border' => 'single',
-        'borderWidth' => 6,
-        'borderColor' => 'CCCCCC',
-        'font' => 'Arial',
-        'fontSize' => 10,
-        'tableAlign' => 'center',
-        'columnWidths' => [
-            2500,
-            1800,
-            4500
-        ]
-    ]
-);
-
-/*
- * Generate DOCX
- */
-$documentsPath = __DIR__ . '/documents';
-
-if (!is_dir($documentsPath)) {
-    mkdir($documentsPath, 0777, true);
+    public static function defaultSofficePath(string $operatingSystem): string {
+        return match ($operatingSystem) {
+            self::MACOS => '/Applications/LibreOffice.app/Contents/MacOS/soffice',
+            self::WINDOWS => 'C:\\Program Files\\LibreOffice\\program\\soffice.exe',
+            self::LINUX => '/usr/bin/soffice',
+        };
+    }
 }
 
-$wordFile = $documentsPath . '/performance-review.docx';
-
-$docx->createDocx($wordFile);
-
-echo "DOCX created:\n";
-echo $wordFile . PHP_EOL;
-
-
-/*
- * Convert DOCX -> PDF using LibreOffice
+/**
+ * Thrown when a LibreOffice-based document conversion fails.
  */
+final class DocumentConversionException extends RuntimeException {}
 
-if (PHP_OS_FAMILY === 'Darwin') {
-    $libreOffice = '/Applications/LibreOffice.app/Contents/MacOS/soffice'; // MACOS
-} elseif (PHP_OS_FAMILY === 'Linux') {
-    $libreOffice = '/usr/bin/soffice'; // LINUX
-} else {
-    throw new Exception(
-        'Operating system not supported: ' . PHP_OS_FAMILY
-    );
+/**
+ * Converts office documents (e.g. .docx) to PDF using LibreOffice's headless CLI.
+ */
+final readonly class LibreOfficeConverter {
+    public function __construct(
+        private ?string $sofficePath = null,
+    ) {  }
+
+    public function convertToPdf(string $source, string $target): string {
+        $sourceFile = new SplFileInfo($source);
+
+        if (!$sourceFile->isFile()) {
+            throw new DocumentConversionException("Word document not found: {$source}");
+        }
+
+        $sofficeBinary = $this->resolveSofficePath();
+
+        if (!is_file($sofficeBinary)) {
+            throw new DocumentConversionException("LibreOffice binary not found at: {$sofficeBinary}");
+        }
+
+        $outputDir = dirname($target);
+        $this->ensureDirectoryExists($outputDir);
+
+        [$exitCode, $output] = $this->runConversion($sofficeBinary, $sourceFile->getPathname(), $outputDir);
+
+        if ($exitCode !== 0) {
+            throw new DocumentConversionException(
+                "LibreOffice conversion failed (exit code {$exitCode}): " . implode("\n", $output)
+            );
+        }
+
+        $generatedPdf = $outputDir . DIRECTORY_SEPARATOR . $sourceFile->getBasename('.' . $sourceFile->getExtension()) . '.pdf';
+
+        if (!is_file($generatedPdf)) {
+            throw new DocumentConversionException(
+                "Conversion reported success but PDF was not found at: {$generatedPdf}\nOutput: " . implode("\n", $output)
+            );
+        }
+
+        if ($generatedPdf !== $target && !rename($generatedPdf, $target)) {
+            throw new DocumentConversionException("Could not move generated PDF to target path: {$target}");
+        }
+
+        return $target;
+    }
+
+    private function resolveSofficePath(): string {
+        return $this->sofficePath ?? OperatingSystem::defaultSofficePath(OperatingSystem::current());
+    }
+
+    private function ensureDirectoryExists(string $directory): void {
+        if (is_dir($directory)) {
+            return;
+        }
+
+        if (!mkdir($directory, 0755, true) && !is_dir($directory)) {
+            throw new DocumentConversionException("Could not create output directory: {$directory}");
+        }
+    }
+
+    /**
+     * @return array{0: int, 1: string[]}
+     */
+    private function runConversion(string $sofficeBinary, string $sourcePath, string $outputDir): array {
+        $command = sprintf(
+            '%s --headless --convert-to pdf --outdir %s %s 2>&1',
+            escapeshellarg($sofficeBinary),
+            escapeshellarg($outputDir),
+            escapeshellarg($sourcePath),
+        );
+
+        exec($command, $output, $exitCode);
+
+        return [$exitCode, $output];
+    }
 }
 
-if (!file_exists($libreOffice)) {
-    throw new Exception(
-        'LibreOffice executable not found: ' . $libreOffice
-    );
+// --- Usage ---
+
+$source = __DIR__ . '/documents/existing-document.docx';
+$target = __DIR__ . '/documents/existing-document.pdf';
+
+$converter = new LibreOfficeConverter();
+
+try {
+    $pdfPath = $converter->convertToPdf($source, $target);
+
+    echo "Word document converted successfully." . PHP_EOL;
+    echo "PDF: {$pdfPath}" . PHP_EOL;
+} catch (DocumentConversionException $e) {
+    fwrite(STDERR, "ERROR: " . $e->getMessage() . PHP_EOL);
+    exit(1);
 }
-
-$pdfFile = $documentsPath . '/performance-review.pdf';
-
-$command = sprintf(
-    '%s --headless --convert-to pdf --outdir %s %s 2>&1',
-    escapeshellarg($libreOffice),
-    escapeshellarg($documentsPath),
-    escapeshellarg($wordFile)
-);
-
-exec($command, $output, $returnCode);
-
-echo "\nLibreOffice output:\n";
-echo implode(PHP_EOL, $output) . PHP_EOL;
-
-if ($returnCode !== 0) {
-    throw new Exception(
-        'LibreOffice conversion failed. Exit code: ' . $returnCode
-    );
-}
-
-if (!file_exists($pdfFile)) {
-    throw new Exception(
-        'LibreOffice finished, but PDF was not generated: ' . $pdfFile
-    );
-}
-
-echo "\nPDF created successfully:\n";
-echo $pdfFile . PHP_EOL;
